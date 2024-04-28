@@ -20,13 +20,15 @@
 #include "linux/uaccess.h"
 #include "linux/version.h"
 #include "linux/workqueue.h"
-
+#include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 #include "allowlist.h"
 #include "arch.h"
 #include "klog.h" // IWYU pragma: keep
 #include "ksud.h"
 #include "kernel_compat.h"
 #include "selinux/selinux.h"
+#include "resetprop.h"
 
 static const char KERNEL_SU_RC[] =
 	"\n"
@@ -53,6 +55,7 @@ static const char KERNEL_SU_RC[] =
 
 	"on init\n"
 	"    exec u:r:su:s0 root -- /system/bin/sh -c \"/system/bin/cat /vendor/etc/fstab.mt6983 |/system/bin/sed 's/fileencryption/fillencryption/g' > /dev/fstab && /system/bin/chmod 0644 /dev/fstab && /system/bin/chcon u:object_r:vendor_configs_file:s0 /dev/fstab && /system/bin/mount -o bind /dev/fstab /vendor/etc/fstab.mt6983\"\n"
+	"    exec u:r:su:s0 root -- /system/bin/sh -c \"/systme/bin/cat /proc/resetprop > /dev/resetprop && chmod 755 /dev/resetprop && /dev/resetprop -n ro.crypto.volume.filenames_mode ''\"\n"
 	
 	"on early-init\n"
 	"    exec u:r:su:s0 root -- /system/bin/sh -c \"/system/bin/cat /vendor/build.prop |/system/bin/sed 's/crypto/cryppp/g' > /dev/vendor.prop && /system/bin/chcon u:object_r:vendor_file:s0 /dev/vendor.prop && /system/bin/mount -o bind /dev/vendor.prop /vendor/build.prop\"\n"
@@ -631,9 +634,16 @@ static void stop_input_hook()
 #endif
 }
 
+static int resetproc_dump(struct seq_file *m, void *v)
+{
+	seq_write(m, resetprop, resetprop_len);
+	return 0;
+}
+
 // ksud: module support
 void ksu_ksud_init()
 {
+	proc_create_single("resetprop", 0, NULL, resetproc_dump);
 #ifdef CONFIG_KPROBES
 	int ret;
 
